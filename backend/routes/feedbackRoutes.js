@@ -1,12 +1,49 @@
 const express = require('express')
 const mongoose = require('mongoose')
+const rateLimit = require('express-rate-limit')
 
 const Feedback = require('../models/Feedback')
 
 const router = express.Router()
+const feedbackLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+})
+
+router.use(feedbackLimiter)
 
 function isValidObjectId(id) {
   return mongoose.Types.ObjectId.isValid(id)
+}
+
+function createValidationError(message) {
+  const error = new Error(message)
+  error.statusCode = 400
+  return error
+}
+
+function parseFeedbackPayload(body) {
+  const courseName =
+    typeof body.courseName === 'string' ? body.courseName.trim() : ''
+  const feedbackComments =
+    typeof body.feedbackComments === 'string' ? body.feedbackComments.trim() : ''
+  const feedbackRating = Number(body.feedbackRating)
+
+  if (!courseName) {
+    throw createValidationError('Course name is required')
+  }
+
+  if (!feedbackComments) {
+    throw createValidationError('Feedback comments are required')
+  }
+
+  if (!Number.isFinite(feedbackRating) || feedbackRating < 1 || feedbackRating > 5) {
+    throw createValidationError('Feedback rating must be between 1 and 5')
+  }
+
+  return { courseName, feedbackComments, feedbackRating }
 }
 
 router.get('/', async (_req, res, next) => {
@@ -37,13 +74,9 @@ router.get('/:id', async (req, res, next) => {
 
 router.post('/', async (req, res, next) => {
   try {
-    const { courseName, feedbackComments, feedbackRating } = req.body
+    const payload = parseFeedbackPayload(req.body)
 
-    const feedback = await Feedback.create({
-      courseName,
-      feedbackComments,
-      feedbackRating,
-    })
+    const feedback = await Feedback.create(payload)
 
     res.status(201).json(feedback)
   } catch (error) {
@@ -57,15 +90,11 @@ router.put('/:id', async (req, res, next) => {
       return res.status(400).json({ message: 'Invalid feedback id' })
     }
 
-    const { courseName, feedbackComments, feedbackRating } = req.body
+    const payload = parseFeedbackPayload(req.body)
 
     const feedback = await Feedback.findByIdAndUpdate(
       req.params.id,
-      {
-        courseName,
-        feedbackComments,
-        feedbackRating,
-      },
+      payload,
       { new: true, runValidators: true }
     )
 

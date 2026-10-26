@@ -21,7 +21,8 @@ app.get('/', (_req, res) => {
 app.use('/api/feedbacks', feedbackRoutes)
 
 app.use((err, _req, res, _next) => {
-  res.status(500).json({ message: err.message || 'Server error' })
+  const statusCode = err.statusCode || 500
+  res.status(statusCode).json({ message: err.message || 'Server error' })
 })
 
 async function startServer() {
